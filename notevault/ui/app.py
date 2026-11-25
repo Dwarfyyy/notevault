@@ -2,7 +2,7 @@
 from PySide6.QtCore import Qt, QSignalBlocker
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
-    QApplication, QComboBox, QInputDialog, QLabel, QLineEdit, QListWidget,
+    QApplication, QComboBox, QDialog, QInputDialog, QLabel, QLineEdit, QListWidget,
     QListWidgetItem, QMainWindow, QMessageBox,
     QSplitter, QToolBar, QVBoxLayout, QWidget,
 )
@@ -11,6 +11,7 @@ from notevault.core.links import backlinks
 from notevault.core.search import search
 from notevault.core.vault import Vault
 from .editor import Editor
+from .graph_view import GraphView
 from .preview import Preview
 
 
@@ -37,6 +38,7 @@ class Window(QMainWindow):
         self.action("Новая", self.new_note, "Ctrl+N")
         self.action("Сохранить", self.save, "Ctrl+S")
         self.action("Сегодня", self.daily)
+        self.action("Граф", self.show_graph)
 
         self.notes = QListWidget()
         self.notes.itemActivated.connect(self.open_result)
@@ -177,6 +179,24 @@ class Window(QMainWindow):
             QMessageBox.warning(self, "Ошибка создания", str(error))
             return
         self.open_name(note.name)
+
+    def show_graph(self):
+        if not self.save():
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Граф заметок")
+        dialog.resize(740, 560)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel("Двойной щелчок открывает заметку. Колесо меняет масштаб."))
+        graph = GraphView(self.vault)
+        layout.addWidget(graph)
+
+        def open_node(name):
+            self.open_name(name)
+            dialog.accept()
+
+        graph.navigate.connect(open_node)
+        dialog.exec()
 
     def closeEvent(self, event):
         if self.save():
