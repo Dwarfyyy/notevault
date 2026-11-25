@@ -2,10 +2,13 @@
 from PySide6.QtCore import Qt, QSignalBlocker
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
-    QApplication, QInputDialog, QLabel, QListWidget, QMainWindow, QMessageBox,
+    QApplication, QComboBox, QInputDialog, QLabel, QLineEdit, QListWidget,
+    QListWidgetItem, QMainWindow, QMessageBox,
     QSplitter, QToolBar, QVBoxLayout, QWidget,
 )
 
+from notevault.core.links import backlinks
+from notevault.core.search import search
 from notevault.core.vault import Vault
 from .editor import Editor
 from .preview import Preview
@@ -36,12 +39,24 @@ class Window(QMainWindow):
         self.action("Сегодня", self.daily)
 
         self.notes = QListWidget()
-        self.notes.itemActivated.connect(lambda item: self.open_name(item.text()))
-        self.notes.itemClicked.connect(lambda item: self.open_name(item.text()))
+        self.notes.itemActivated.connect(self.open_result)
+        self.notes.itemClicked.connect(self.open_result)
         self.sidebar = QWidget()
         self.sidebar_layout = QVBoxLayout(self.sidebar)
         self.sidebar_layout.addWidget(QLabel("Хранилище"))
-        self.sidebar_layout.addWidget(self.notes, 1)
+        self.query = QLineEdit()
+        self.query.setPlaceholderText("Поиск по заметкам")
+        self.query.textChanged.connect(self.refresh)
+        self.tag = QComboBox()
+        self.tag.currentIndexChanged.connect(self.refresh)
+        self.sidebar_layout.addWidget(self.query)
+        self.sidebar_layout.addWidget(self.tag)
+        self.sidebar_layout.addWidget(self.notes, 3)
+        self.sidebar_layout.addWidget(QLabel("Обратные ссылки"))
+        self.incoming = QListWidget()
+        self.incoming.itemClicked.connect(lambda item: self.open_name(item.text()))
+        self.incoming.itemActivated.connect(lambda item: self.open_name(item.text()))
+        self.sidebar_layout.addWidget(self.incoming, 1)
 
         self.editor = Editor()
         self.editor.setEnabled(False)
@@ -66,11 +81,49 @@ class Window(QMainWindow):
         self.toolbar.addAction(action)
 
     def refresh(self):
+        selected_tag = self.tag.currentData()
+        with QSignalBlocker(self.tag):
+            self.tag.clear()
+            self.tag.addItem("Все теги", None)
+            for tag in self.vault.all_tags():
+                self.tag.addItem(f"#{tag}", tag)
+            self.tag.setCurrentIndex(max(0, self.tag.findData(selected_tag)))
+        selected_tag = self.tag.currentData()
+
         self.notes.clear()
-        for note in self.vault.all_notes():
-            self.notes.addItem(note.name)
-            if note is self.note:
-                self.notes.setCurrentRow(self.notes.count() - 1)
+        query = self.query.text().strip()
+        if query:
+            for hit in search(self.vault, query):
+                if selected_tag is None or selected_tag in hit.note.tags:
+                    context = hit.context.replace("**", "")
+                    self.add_result(hit.note, f"{hit.note.name}:{hit.line_no}  {context}", hit.line_no)
+        else:
+            for note in self.vault.all_notes():
+                if selected_tag is None or selected_tag in note.tags:
+                    self.add_result(note, note.name)
+
+        self.incoming.clear()
+        if self.note is not None:
+            self.incoming.addItems([note.name for note in backlinks(self.vault, self.note)])
+
+    def add_result(self, note, label, line=None):
+        item = QListWidgetItem(label)
+        item.setData(Qt.ItemDataRole.UserRole, (note.name, line))
+        self.notes.addItem(item)
+        if note is self.note and line is None:
+            self.notes.setCurrentItem(item)
+
+    def open_result(self, item):
+        name, line = item.data(Qt.ItemDataRole.UserRole)
+        self.open_name(name)
+        if line and self.note is self.vault.get(name):
+            cursor = self.editor.textCursor()
+            block = self.editor.document().findBlockByNumber(line - 1)
+            if block.isValid():
+                cursor.setPosition(block.position())
+            self.editor.setTextCursor(cursor)
+            self.editor.centerCursor()
+            self.editor.setFocus()
 
     def update_preview(self):
         self.preview.render(self.editor.toPlainText())
@@ -84,6 +137,7 @@ class Window(QMainWindow):
             QMessageBox.warning(self, "Ошибка сохранения", str(error))
             return False
         self.editor.document().setModified(False)
+        self.refresh()
         self.statusBar().showMessage("Заметка сохранена", 2500)
         return True
 

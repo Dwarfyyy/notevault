@@ -44,7 +44,7 @@ def search(vault: Vault, query: str, *, regex: bool = False,
     for note in vault.notes.values():
         for line_no, line in enumerate(note.text.splitlines(), start=1):
             for match in rx.finditer(line):
-                hits.append(SearchHit(note, line_no, line.strip(),
+                hits.append(SearchHit(note, line_no, line,
                                       match.start(), match.end()))
     return hits
 
