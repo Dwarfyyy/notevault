@@ -87,7 +87,7 @@ class Note:
         return cls(path=path, text=path.read_text(encoding="utf-8"))
 
     def save(self, text: str | None = None) -> None:
-        if text is not None:
-            self.text = text
-        self.path.write_text(self.text, encoding="utf-8")
+        content = self.text if text is None else text
+        self.path.write_text(content, encoding="utf-8")
+        self.text = content
         self.refresh()

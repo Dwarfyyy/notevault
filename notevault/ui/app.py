@@ -72,8 +72,9 @@ class Window(QMainWindow):
         self.setCentralWidget(self.panes)
 
         self.refresh()
-        if vault.get("Старт"):
-            self.open_name("Старт")
+        first = vault.get("Старт") or next(iter(vault.all_notes()), None)
+        if first is not None:
+            self.open_name(first.name)
 
     def action(self, label, callback, shortcut=None):
         action = QAction(label, self)

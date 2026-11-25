@@ -26,7 +26,8 @@ class Vault:
         """Полностью пересканирует хранилище."""
         self.notes.clear()
         for path in sorted(self.root.rglob("*.md")):
-            self._add(Note.load(path))
+            if path.is_file() and path.resolve().is_relative_to(self.root):
+                self._add(Note.load(path))
 
     def _add(self, note: Note) -> None:
         self.notes[normalize_name(note.name)] = note
@@ -52,15 +53,19 @@ class Vault:
 
     def note_path(self, name: str) -> Path:
         safe = name.strip().replace("/", "_").replace("\\", "_")
+        if not safe or safe in {".", ".."}:
+            raise ValueError("Введите имя заметки")
         return self.root / f"{safe}.md"
 
     def create(self, name: str, text: str = "") -> Note:
         """Создаёт новую заметку; если существует — возвращает её."""
-        existing = self.get(name)
+        path = self.note_path(name)
+        existing = self.get(path.stem)
         if existing is not None:
             return existing
-        note = Note(path=self.note_path(name), text=text)
-        note.save()
+        note = Note(path=path, text=text)
+        with path.open("x", encoding="utf-8") as file:
+            file.write(text)
         self._add(note)
         return note
 
@@ -77,6 +82,11 @@ class Vault:
         """Переименовывает файл заметки и обновляет индекс."""
         old_key = normalize_name(note.name)
         new_path = self.note_path(new_name)
+        if new_path == note.path:
+            return note
+        existing = self.get(new_path.stem)
+        if (existing is not None and existing is not note) or new_path.exists():
+            raise FileExistsError(new_path)
         note.path.rename(new_path)
         self.notes.pop(old_key, None)
         note.path = new_path

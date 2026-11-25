@@ -1,4 +1,5 @@
 """Предпросмотр Markdown с переходами по wiki-ссылкам."""
+import re
 from urllib.parse import quote, unquote
 
 from PySide6.QtCore import Signal
@@ -35,6 +36,4 @@ class Preview(QTextBrowser):
 
 
 def re_split_code(text):
-    import re
-
     return re.split(f"({CODE_BLOCK_RE.pattern}|{INLINE_CODE_RE.pattern})", text, flags=re.DOTALL)
